@@ -1,0 +1,60 @@
+---
+title: "Enrichement plot"
+author: "Mare Bouche"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r}
+#Fisher exact test code written by Mare
+
+library(dplyr)
+library(readxl)
+library(openxlsx)
+
+data <- read_excel("path_to_file", sheet = 1)  #insert your file path
+
+#Change the variables with your own data
+Total_Genome <- sum(data$Count_Ath_Genome, na.rm = TRUE) #the total sum of all domains in the proteome
+Total_MCS <- sum(data$Count_MCS_Ath, na.rm = TRUE) #the total sum of all domains in the MCS proteins 
+
+pvalue_fisher_ath <- data %>%
+  filter(!is.na(Count_MCS_Ath) & !is.na(Count_Ath_Genome))%>%  # Filter rows with no domain counts
+  rowwise() %>% #look at each row individually 
+  mutate(
+    p_value_Ath = fisher.test(matrix(c(
+      Count_MCS_Ath, Total_MCS - Count_MCS_Ath,
+      Count_Ath_Genome - Count_MCS_Ath, Total_Genome + Count_MCS_Ath - Count_Ath_Genome - Total_MCS 
+    ), nrow = 2), alternative = "greater")$p.value #perform a one sided fisher test and extract the p-value out of this
+  ) %>%
+  ungroup() %>%
+  mutate(
+    adjusted_p_value_Ath = p.adjust(p_value_Ath, method = "bonferroni")  # adjust p-values for multiple testing using Bonferroni method
+  )
+
+print(pvalue_fisher_ath)
+
+write.xlsx(pvalue_fisher_ath, "path_to_file.xlsx", rowNames = FALSE) #save the data as an excel document
+```
+
+```{r}
+#Visualisation of the enriched domains by Mare 
+library(ggplot2)
+
+#filter for significant domains
+significant_domains <- pvalue_fisher_ath %>%
+  filter(adjusted_p_value_Ath < 0.01) %>%  #keep only significant domains (p-value < 0.01)
+  mutate(domain_ratio = Count_MCS_Ath / Count_Ath_Genome) %>%  #calculate the domain ratio (= MCS count/total count per domain)
+  arrange(desc(domain_ratio))  #sort by descending ratio 
+
+ggplot(significant_domains, aes(x = domain_ratio, y = reorder(`Subdomain Name`, domain_ratio), size = Count_MCS_Ath, color = adjusted_p_value_Ath)) +
+  geom_point() + #make a dotplot that plots out the domain ratio per domain, the size of the dots is equivalent to the MCS count and the color shows the adjusted p-value
+  scale_color_gradient(low = "red", high = "blue") +  
+  labs(title = "Enriched Domains in Membrane Contact Sites",
+       x = "Domain Ratio",
+       y = "Domain",
+       color = "Adjusted p-value",
+       size = "MCS Count") + #choose labels for the graph
+  theme_bw() 
+```
+
