@@ -1,0 +1,84 @@
+---
+title: "Z Score"
+author: "Mare Bouche"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r}
+# Load necessary libraries
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(openxlsx)
+
+data <- read_excel("C:/Users/mareb/OneDrive/Bureaublad/Samenvattingen/Master 1/Semester 2/Master Project 2/Turbo-ID Data/Zscore.xlsx")
+
+# Step 1: Normalize the LogValue and BaitCount
+data <- data %>%
+  mutate(NormalizedLogValue = scale(Log_value, center = TRUE, scale = TRUE),
+         NormalizedBaitCount = scale(Baits_Free_TurboID, center = TRUE, scale = TRUE ))
+
+# Step 2: Combine the normalized values into a score
+# You can adjust the weights if needed
+data <- data %>%
+  mutate(Score = NormalizedLogValue + NormalizedBaitCount)
+
+# Step 3: Rank the proteins based on the score
+data <- data %>%
+  arrange(desc(Score))
+
+
+# Save the ranked data to a new Excel file
+output_file <- "C:/Users/mareb/OneDrive/Bureaublad/Samenvattingen/Master 1/Semester 2/Master Project 2/Turbo-ID Data/Ranked_data_woee.xlsx"
+write.xlsx(data, output_file, rowNames = FALSE)
+
+# Optionally, visualize the top-ranked proteins
+top_proteins <- data %>% top_n(10, Score)
+ggplot(top_proteins, aes(x = reorder(Gene, Score), y = Score)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +
+  labs(title = "Top 10 Ranked Proteins",
+       x = "Protein",
+       y = "Score")
+```
+
+
+
+```{r}
+# Load the required libraries
+library(readxl)       # For reading Excel files
+library(ComplexHeatmap) # For generating heatmaps
+library(circlize)     # For color management in heatmaps
+
+# Define the path to the Excel file
+file_path <- "C:/Users/mareb/OneDrive/Bureaublad/Samenvattingen/Master 1/Semester 2/Master Project 2/Turbo-ID Data/filtered_data1.xlsx"
+
+# Load the dataset from the "heatmap" sheet in the Excel file
+df <- read_excel(file_path, sheet = "heatmap")
+
+# Inspect column names to understand the data structure
+colnames(df)
+
+# Select only the numeric columns starting from the 3rd column (assuming these are the log2 fold changes)
+# Adjust the column index if needed to match the actual data structure
+data_matrix <- as.matrix(df[, 3:ncol(df)])
+
+# Set row names of the data matrix to the gene names (assumed to be in the "Gene Name" column)
+rownames(data_matrix) <- df$`Gene Name`
+
+# Convert the data to numeric, ensuring any non-numeric values are handled correctly
+data_matrix <- apply(data_matrix, 2, as.numeric)
+
+# Create a row annotation for the heatmap with protein IDs (using the "Protein ID" column)
+row_annotation <- rowAnnotation(ProteinID = anno_text(df$`Protein ID`, gp = gpar(fontsize = 8)))
+
+# Generate the heatmap using the ComplexHeatmap package
+Heatmap(data_matrix, 
+        name = "log2 Fold Changes",   # Label for the color scale
+        row_title = "Protein ID",     # Title for the rows
+        column_title = "Log Value", # Title for the columns
+        right_annotation = row_annotation,  # Add the row annotation (Protein IDs)
+        col = colorRamp2(c(-2, 0, 2), c("blue", "white", "red")), # Color scale for log2 fold change
+        heatmap_legend_param = list(title = "log2 Fold Change"))
+```
+
